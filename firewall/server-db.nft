@@ -1,0 +1,19 @@
+#!/usr/sbin/nft -f
+# exam database host firewall
+# Host firewall (microsegmentation). Edit, then: docker compose restart <service>
+flush ruleset
+
+table inet filter {
+    chain input {
+        type filter hook input priority 0; policy drop;
+        ct state established,related accept
+        iif "lo" accept
+        icmp type echo-request accept
+        ip saddr 10.145.10.0/24 tcp dport 1521 accept
+        ip saddr 10.145.10.13 accept
+        ip saddr 10.145.60.11 accept
+        ip saddr 10.145.20.10 tcp dport 1521 accept
+    }
+    chain forward { type filter hook forward priority 0; policy drop; }
+    chain output { type filter hook output priority 0; policy accept; }
+}

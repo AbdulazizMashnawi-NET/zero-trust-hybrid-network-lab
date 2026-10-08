@@ -1,0 +1,372 @@
+# CNET-463 Case Study 2 - isolated Zero Trust hybrid campus lab
+# Team T01  (engineering / coastal campus)
+#
+# This entire lab is private to your laptop. Every container is on one Docker
+# bridge network (10.145.0.0/16). Nothing here reaches any real system.
+#
+#   docker compose up -d        start
+#   docker compose exec student sh   open a shell on the student host
+#   docker compose down -v      stop and remove everything
+#
+# Case study and lab designed and built by Dr. Mohammed Jubur,
+# Instructor, CNET-463 Network Security Management, Jazan University.
+#
+name: cnet463-cs2-t01
+
+services:
+  pki:
+    image: cnet463/labnode:latest
+    build: ./tools
+    profiles: ["setup"]
+    entrypoint: ["bash", "-c", "cd /lab/pki && tr -d '\\r' < make_certs.sh > .make_certs.lf && mv .make_certs.lf make_certs.sh && exec bash make_certs.sh"]
+    volumes:
+      - ./pki:/lab/pki
+  pep:
+    image: cnet463/labnode:latest
+    build: ./tools
+    container_name: pep_t01
+    hostname: pep.engineering.t01.uni.lab
+    cap_add: ["NET_ADMIN", "NET_RAW"]
+    environment:
+      ROLE: "pep"
+      TEAM: "T01"
+      HTTPS_PORT: "10443"
+      DB_PORT: "1521"
+      EXAM_FQDN: "exam.engineering.t01.uni.lab"
+      IDP_FQDN: "idp.engineering.t01.uni.lab"
+      RECORDS_FQDN: "records.engineering.t01.uni.lab"
+      EXAMAPP_IP: "10.145.20.10"
+      RECORDS_IP: "10.145.30.20"
+      SUPPORT_IP: "10.145.40.20"
+      USER_NET: "10.145.10.0/24"
+      GUEST_IP: "10.145.10.13"
+      ADMIN_NET: "10.145.40.0/24"
+    networks:
+      campus:
+        ipv4_address: 10.145.50.10
+    volumes:
+      - ./firewall:/lab/firewall:ro
+      - ./edge:/lab/edge:ro
+      - ./idp:/lab/idp:ro
+      - ./examapp:/lab/examapp:ro
+      - ./pki:/lab/pki:ro
+      - ./vendor:/lab/vendor:ro
+
+  idp:
+    image: cnet463/labnode:latest
+    build: ./tools
+    container_name: idp_t01
+    hostname: idp.engineering.t01.uni.lab
+    cap_add: ["NET_ADMIN", "NET_RAW"]
+    environment:
+      ROLE: "idp"
+      TEAM: "T01"
+      HTTPS_PORT: "10443"
+      DB_PORT: "1521"
+      EXAM_FQDN: "exam.engineering.t01.uni.lab"
+      IDP_FQDN: "idp.engineering.t01.uni.lab"
+      RECORDS_FQDN: "records.engineering.t01.uni.lab"
+      EXAMAPP_IP: "10.145.20.10"
+      RECORDS_IP: "10.145.30.20"
+      SUPPORT_IP: "10.145.40.20"
+      USER_NET: "10.145.10.0/24"
+      GUEST_IP: "10.145.10.13"
+      ADMIN_NET: "10.145.40.0/24"
+    networks:
+      campus:
+        ipv4_address: 10.145.50.11
+    volumes:
+      - ./firewall:/lab/firewall:ro
+      - ./edge:/lab/edge:ro
+      - ./idp:/lab/idp:ro
+      - ./examapp:/lab/examapp:ro
+      - ./pki:/lab/pki:ro
+      - ./vendor:/lab/vendor:ro
+
+  examapp:
+    image: cnet463/labnode:latest
+    build: ./tools
+    container_name: examapp_t01
+    hostname: examapp.engineering.t01.uni.lab
+    cap_add: ["NET_ADMIN", "NET_RAW"]
+    environment:
+      ROLE: "examapp"
+      TEAM: "T01"
+      HTTPS_PORT: "10443"
+      DB_PORT: "1521"
+      EXAM_FQDN: "exam.engineering.t01.uni.lab"
+      IDP_FQDN: "idp.engineering.t01.uni.lab"
+      RECORDS_FQDN: "records.engineering.t01.uni.lab"
+      EXAMAPP_IP: "10.145.20.10"
+      RECORDS_IP: "10.145.30.20"
+      SUPPORT_IP: "10.145.40.20"
+      USER_NET: "10.145.10.0/24"
+      GUEST_IP: "10.145.10.13"
+      ADMIN_NET: "10.145.40.0/24"
+    networks:
+      campus:
+        ipv4_address: 10.145.20.10
+    volumes:
+      - ./firewall:/lab/firewall:ro
+      - ./edge:/lab/edge:ro
+      - ./idp:/lab/idp:ro
+      - ./examapp:/lab/examapp:ro
+      - ./pki:/lab/pki:ro
+      - ./vendor:/lab/vendor:ro
+
+  examdb:
+    image: cnet463/labnode:latest
+    build: ./tools
+    container_name: examdb_t01
+    hostname: examdb.engineering.t01.uni.lab
+    cap_add: ["NET_ADMIN", "NET_RAW"]
+    environment:
+      ROLE: "server-db"
+      TEAM: "T01"
+      HTTPS_PORT: "10443"
+      DB_PORT: "1521"
+      EXAM_FQDN: "exam.engineering.t01.uni.lab"
+      IDP_FQDN: "idp.engineering.t01.uni.lab"
+      RECORDS_FQDN: "records.engineering.t01.uni.lab"
+      EXAMAPP_IP: "10.145.20.10"
+      RECORDS_IP: "10.145.30.20"
+      SUPPORT_IP: "10.145.40.20"
+      USER_NET: "10.145.10.0/24"
+      GUEST_IP: "10.145.10.13"
+      ADMIN_NET: "10.145.40.0/24"
+    networks:
+      campus:
+        ipv4_address: 10.145.30.10
+    volumes:
+      - ./firewall:/lab/firewall:ro
+      - ./edge:/lab/edge:ro
+      - ./idp:/lab/idp:ro
+      - ./examapp:/lab/examapp:ro
+      - ./pki:/lab/pki:ro
+      - ./vendor:/lab/vendor:ro
+
+  records:
+    image: cnet463/labnode:latest
+    build: ./tools
+    container_name: records_t01
+    hostname: records.engineering.t01.uni.lab
+    cap_add: ["NET_ADMIN", "NET_RAW"]
+    environment:
+      ROLE: "server-records"
+      TEAM: "T01"
+      HTTPS_PORT: "10443"
+      DB_PORT: "1521"
+      EXAM_FQDN: "exam.engineering.t01.uni.lab"
+      IDP_FQDN: "idp.engineering.t01.uni.lab"
+      RECORDS_FQDN: "records.engineering.t01.uni.lab"
+      EXAMAPP_IP: "10.145.20.10"
+      RECORDS_IP: "10.145.30.20"
+      SUPPORT_IP: "10.145.40.20"
+      USER_NET: "10.145.10.0/24"
+      GUEST_IP: "10.145.10.13"
+      ADMIN_NET: "10.145.40.0/24"
+    networks:
+      campus:
+        ipv4_address: 10.145.30.20
+    volumes:
+      - ./firewall:/lab/firewall:ro
+      - ./edge:/lab/edge:ro
+      - ./idp:/lab/idp:ro
+      - ./examapp:/lab/examapp:ro
+      - ./pki:/lab/pki:ro
+      - ./vendor:/lab/vendor:ro
+
+  admin:
+    image: cnet463/labnode:latest
+    build: ./tools
+    container_name: admin_t01
+    hostname: admin.engineering.t01.uni.lab
+    cap_add: ["NET_ADMIN", "NET_RAW"]
+    environment:
+      ROLE: "admin"
+      TEAM: "T01"
+      HTTPS_PORT: "10443"
+      DB_PORT: "1521"
+      EXAM_FQDN: "exam.engineering.t01.uni.lab"
+      IDP_FQDN: "idp.engineering.t01.uni.lab"
+      RECORDS_FQDN: "records.engineering.t01.uni.lab"
+      EXAMAPP_IP: "10.145.20.10"
+      RECORDS_IP: "10.145.30.20"
+      SUPPORT_IP: "10.145.40.20"
+      USER_NET: "10.145.10.0/24"
+      GUEST_IP: "10.145.10.13"
+      ADMIN_NET: "10.145.40.0/24"
+    networks:
+      campus:
+        ipv4_address: 10.145.40.11
+    volumes:
+      - ./firewall:/lab/firewall:ro
+      - ./edge:/lab/edge:ro
+      - ./idp:/lab/idp:ro
+      - ./examapp:/lab/examapp:ro
+      - ./pki:/lab/pki:ro
+      - ./vendor:/lab/vendor:ro
+
+  support:
+    image: cnet463/labnode:latest
+    build: ./tools
+    container_name: support_t01
+    hostname: support.engineering.t01.uni.lab
+    cap_add: ["NET_ADMIN", "NET_RAW"]
+    environment:
+      ROLE: "server-support"
+      TEAM: "T01"
+      HTTPS_PORT: "10443"
+      DB_PORT: "1521"
+      EXAM_FQDN: "exam.engineering.t01.uni.lab"
+      IDP_FQDN: "idp.engineering.t01.uni.lab"
+      RECORDS_FQDN: "records.engineering.t01.uni.lab"
+      EXAMAPP_IP: "10.145.20.10"
+      RECORDS_IP: "10.145.30.20"
+      SUPPORT_IP: "10.145.40.20"
+      USER_NET: "10.145.10.0/24"
+      GUEST_IP: "10.145.10.13"
+      ADMIN_NET: "10.145.40.0/24"
+    networks:
+      campus:
+        ipv4_address: 10.145.40.20
+    volumes:
+      - ./firewall:/lab/firewall:ro
+      - ./edge:/lab/edge:ro
+      - ./idp:/lab/idp:ro
+      - ./examapp:/lab/examapp:ro
+      - ./pki:/lab/pki:ro
+      - ./vendor:/lab/vendor:ro
+
+  student:
+    image: cnet463/labnode:latest
+    build: ./tools
+    container_name: student_t01
+    hostname: student.engineering.t01.uni.lab
+    cap_add: ["NET_ADMIN", "NET_RAW"]
+    environment:
+      ROLE: "host"
+      TEAM: "T01"
+      HTTPS_PORT: "10443"
+      DB_PORT: "1521"
+      EXAM_FQDN: "exam.engineering.t01.uni.lab"
+      IDP_FQDN: "idp.engineering.t01.uni.lab"
+      RECORDS_FQDN: "records.engineering.t01.uni.lab"
+      EXAMAPP_IP: "10.145.20.10"
+      RECORDS_IP: "10.145.30.20"
+      SUPPORT_IP: "10.145.40.20"
+      USER_NET: "10.145.10.0/24"
+      GUEST_IP: "10.145.10.13"
+      ADMIN_NET: "10.145.40.0/24"
+    networks:
+      campus:
+        ipv4_address: 10.145.10.11
+    volumes:
+      - ./firewall:/lab/firewall:ro
+      - ./edge:/lab/edge:ro
+      - ./idp:/lab/idp:ro
+      - ./examapp:/lab/examapp:ro
+      - ./pki:/lab/pki:ro
+      - ./vendor:/lab/vendor:ro
+
+  staff:
+    image: cnet463/labnode:latest
+    build: ./tools
+    container_name: staff_t01
+    hostname: staff.engineering.t01.uni.lab
+    cap_add: ["NET_ADMIN", "NET_RAW"]
+    environment:
+      ROLE: "host"
+      TEAM: "T01"
+      HTTPS_PORT: "10443"
+      DB_PORT: "1521"
+      EXAM_FQDN: "exam.engineering.t01.uni.lab"
+      IDP_FQDN: "idp.engineering.t01.uni.lab"
+      RECORDS_FQDN: "records.engineering.t01.uni.lab"
+      EXAMAPP_IP: "10.145.20.10"
+      RECORDS_IP: "10.145.30.20"
+      SUPPORT_IP: "10.145.40.20"
+      USER_NET: "10.145.10.0/24"
+      GUEST_IP: "10.145.10.13"
+      ADMIN_NET: "10.145.40.0/24"
+    networks:
+      campus:
+        ipv4_address: 10.145.10.12
+    volumes:
+      - ./firewall:/lab/firewall:ro
+      - ./edge:/lab/edge:ro
+      - ./idp:/lab/idp:ro
+      - ./examapp:/lab/examapp:ro
+      - ./pki:/lab/pki:ro
+      - ./vendor:/lab/vendor:ro
+
+  guest:
+    image: cnet463/labnode:latest
+    build: ./tools
+    container_name: guest_t01
+    hostname: guest.engineering.t01.uni.lab
+    cap_add: ["NET_ADMIN", "NET_RAW"]
+    environment:
+      ROLE: "host"
+      TEAM: "T01"
+      HTTPS_PORT: "10443"
+      DB_PORT: "1521"
+      EXAM_FQDN: "exam.engineering.t01.uni.lab"
+      IDP_FQDN: "idp.engineering.t01.uni.lab"
+      RECORDS_FQDN: "records.engineering.t01.uni.lab"
+      EXAMAPP_IP: "10.145.20.10"
+      RECORDS_IP: "10.145.30.20"
+      SUPPORT_IP: "10.145.40.20"
+      USER_NET: "10.145.10.0/24"
+      GUEST_IP: "10.145.10.13"
+      ADMIN_NET: "10.145.40.0/24"
+    networks:
+      campus:
+        ipv4_address: 10.145.10.13
+    volumes:
+      - ./firewall:/lab/firewall:ro
+      - ./edge:/lab/edge:ro
+      - ./idp:/lab/idp:ro
+      - ./examapp:/lab/examapp:ro
+      - ./pki:/lab/pki:ro
+      - ./vendor:/lab/vendor:ro
+
+  vendor:
+    image: cnet463/labnode:latest
+    build: ./tools
+    container_name: vendor_t01
+    hostname: vendor.engineering.t01.uni.lab
+    cap_add: ["NET_ADMIN", "NET_RAW"]
+    environment:
+      ROLE: "vendor"
+      TEAM: "T01"
+      HTTPS_PORT: "10443"
+      DB_PORT: "1521"
+      EXAM_FQDN: "exam.engineering.t01.uni.lab"
+      IDP_FQDN: "idp.engineering.t01.uni.lab"
+      RECORDS_FQDN: "records.engineering.t01.uni.lab"
+      EXAMAPP_IP: "10.145.20.10"
+      RECORDS_IP: "10.145.30.20"
+      SUPPORT_IP: "10.145.40.20"
+      USER_NET: "10.145.10.0/24"
+      GUEST_IP: "10.145.10.13"
+      ADMIN_NET: "10.145.40.0/24"
+    networks:
+      campus:
+        ipv4_address: 10.145.60.11
+    volumes:
+      - ./firewall:/lab/firewall:ro
+      - ./edge:/lab/edge:ro
+      - ./idp:/lab/idp:ro
+      - ./examapp:/lab/examapp:ro
+      - ./pki:/lab/pki:ro
+      - ./vendor:/lab/vendor:ro
+
+
+networks:
+  campus:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.145.0.0/16
+          gateway: 10.145.0.1

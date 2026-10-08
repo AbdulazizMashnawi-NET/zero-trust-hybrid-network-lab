@@ -1,0 +1,40 @@
+CNET-463 CASE STUDY 2  -  TEAM T01  LAB PARAMETERS
+================================================================
+Case study and lab designed and built by Dr. Mohammed Jubur
+Instructor, CNET-463 Network Security Management, Jazan University
+----------------------------------------------------------------
+Everything below is unique to your team. Every screenshot and log you submit
+MUST show these values (hostnames, subnets, certificate names). Output that
+does not match your team's parameters will not be accepted as your evidence.
+
+Department / campus : engineering / coastal
+Campus network      : 10.145.0.0/16  (one bridge; segment by policy)
+
+Zones (documented /24s inside the campus network)
+  User zone    10.145.10.0/24    student 10.145.10.11  staff 10.145.10.12  guest 10.145.10.13
+  App zone     10.145.20.0/24    exam-app 10.145.20.10
+  Data zone    10.145.30.0/24    exam-DB 10.145.30.10  records 10.145.30.20
+  Admin zone   10.145.40.0/24    admin/jump 10.145.40.11  support 10.145.40.20
+  DMZ          10.145.50.0/24    PEP 10.145.50.10  IdP 10.145.50.11
+  Vendor       10.145.60.0/24    vendor endpoint 10.145.60.11
+
+Services
+  Exam service (via PEP) : https://exam.engineering.t01.uni.lab:10443
+  Identity Provider      : http://10.145.50.11:8081/token
+  Exam database port     : 1521
+  Records API            : http://records.engineering.t01.uni.lab:8080
+  Certificate authority  : Coastal Campus Internal CA (T01)
+
+How to reach the exam service by name (it is not in public DNS):
+  curl -k --resolve exam.engineering.t01.uni.lab:10443:10.145.50.10 \
+       https://exam.engineering.t01.uni.lab:10443/exam
+
+Files you may edit to FIX what you find:
+  firewall/*.nft     host firewalls (segmentation) - restart the named service
+  edge/pep.py        the Policy Enforcement Point (identity/device/paths/TLS)
+  pki/make_certs.sh  certificate parameters
+                     then: docker compose run --rm pki ; docker compose restart pep
+  vendor/wg0.conf    vendor tunnel scope (and any firewall rule trusting the vendor)
+
+This lab ships with 7 deliberate weaknesses for you to discover with
+tools, explain, and fix. Nothing in it touches any real system.

@@ -1,0 +1,2 @@
+subjectAltName = DNS:staff.engineering.t01.uni.lab
+extendedKeyUsage = serverAuth
