@@ -11,7 +11,6 @@ table inet filter {
         icmp type echo-request accept
         ip saddr 10.145.10.0/24 tcp dport 1521 accept
         ip saddr 10.145.10.13 accept
-        ip saddr 10.145.60.11 accept
         ip saddr 10.145.20.10 tcp dport 1521 accept
     }
     chain forward { type filter hook forward priority 0; policy drop; }
