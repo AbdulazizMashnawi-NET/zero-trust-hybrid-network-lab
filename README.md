@@ -95,7 +95,7 @@ The isolated lab environment is allocated the dedicated class B CIDR block `10.1
 ## 3. Lab Directory Structure
 
 ```text
-Case-Study-2-Team_T01/
+zero-trust-hybrid-network-lab/
 ├── README.md                          # Comprehensive Zero Trust engineering documentation
 ├── docker-compose.yml                 # Container orchestration and bridge network definition
 ├── TEAM_INFO.txt                      # Assignment specifications & network allocations
