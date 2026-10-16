@@ -9,7 +9,6 @@ table inet filter {
         ct state established,related accept
         iif "lo" accept
         icmp type echo-request accept
-        ip saddr 10.145.10.13 accept
         ip saddr 10.145.20.10 tcp dport 8080 accept
     }
     chain forward { type filter hook forward priority 0; policy drop; }
