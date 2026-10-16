@@ -12,13 +12,13 @@ openssl genrsa -out out/ca.key 2048 2>/dev/null
 openssl req -x509 -new -key out/ca.key -sha256 -days 1825 \
     -subj "$CA_SUBJ" -out out/ca.crt
 
-echo "[pki T01] creating exam service key + CSR (CN=staff.engineering.t01.uni.lab)"
+echo "[pki T01] creating exam service key + CSR (CN=exam.engineering.t01.uni.lab)"
 openssl genrsa -out out/exam.key 2048 2>/dev/null
-openssl req -new -key out/exam.key -subj "/C=SA/O=University Lab/CN=staff.engineering.t01.uni.lab" \
+openssl req -new -key out/exam.key -subj "/C=SA/O=University Lab/CN=exam.engineering.t01.uni.lab" \
     -out out/exam.csr
 
 cat > out/exam.ext <<EXT
-subjectAltName = DNS:staff.engineering.t01.uni.lab
+subjectAltName = DNS:exam.engineering.t01.uni.lab
 extendedKeyUsage = serverAuth
 EXT
 
@@ -42,7 +42,7 @@ echo 1000 > out/serial
 openssl ca -batch -notext -config out/ca.cnf \
     -cert out/ca.crt -keyfile out/ca.key \
     -in out/exam.csr -out out/exam.crt \
-    -extfile out/exam.ext -startdate 20240101000000Z -enddate 20240201000000Z 2>/dev/null
+    -extfile out/exam.ext -days 365 2>/dev/null
 
 echo "[pki T01] done. Inspect with:"
 echo "   openssl x509 -in out/exam.crt -noout -subject -dates -ext subjectAltName"
