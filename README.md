@@ -1,16 +1,5 @@
 ﻿# Zero Trust Hybrid University Network — Security Assessment & Remediation Lab
-### CNET-463 Network Security Management | Case Study 2 — Team T01
-
-<p align="center">
-  <img src="docs/images/logo_jazan_university.png" alt="Jazan University Logo" width="140">
-</p>
-
-<p align="center">
-  <b>Jazan University</b> • Faculty of Computer Science & Information Technology • Department of Computer & Network Engineering<br>
-  <b>Course:</b> CNET-463 Network Security Management | <b>Semester:</b> Fall 2026<br>
-  <b>Instructor:</b> Dr. Mohammed Jubur | <b>Team:</b> T01 (Coastal Campus)
-</p>
-
+ 
 <p align="center">
   <img src="https://img.shields.io/badge/Security_Model-Zero_Trust_(NIST_SP_800--207)-blue.svg" alt="Zero Trust">
   <img src="https://img.shields.io/badge/Maturity-CISA_ZTMM_v2.0-orange.svg" alt="CISA ZTMM">
