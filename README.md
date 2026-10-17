@@ -1,4 +1,8 @@
-﻿# Zero Trust Hybrid University Network — Security Assessment & Remediation Lab
+# Zero Trust Hybrid University Network — Security Assessment & Remediation Lab
+
+> **Academic project — Jazan University, CNET-463 Network Security Management (Case Study 2, Team T01).**
+> The lab environment (Docker kit, network topology and deliberately planted weaknesses) was designed and built by **Dr. Mohammed Jubur**. This repository documents our assessment, fixes and evidence only; the lab kit itself is not redistributed here.
+> The full submitted report is available at `docs/Report_Case_Study_T01.pdf`.
  
 <p align="center">
   <img src="https://img.shields.io/badge/Security_Model-Zero_Trust_(NIST_SP_800--207)-blue.svg" alt="Zero Trust">
@@ -19,6 +23,21 @@
 | **Abdulaziz Difallah Al-Makhlouti** | **Part D & E** | WireGuard Vendor Tunnel Scoping, VPN vs. ZTNA Evaluation, PKI & X.509 Certificate Remediation |
 | **Khalid Alfaifi** | **Part F** | Cloud/Hybrid Controls, Egress Restrictions, and Cloud Shared Responsibility Framework |
 | **Khalid Al-Qanbar** | **Part G** | CISA ZTMM v2.0 Maturity Assessment, Gap Analysis & Executive Management Memo |
+
+---
+
+## Key Results at a Glance
+
+| # | Weakness found | Fix applied | Verified with |
+| :-: | :--- | :--- | :--- |
+| 1 | Student, staff and guest could reach the exam database (`1521/tcp`) | Removed `10.145.10.0/24` allow rule in `server-db.nft` | nmap before/after, tcpdump |
+| 2 | Guest allow-all rule on database, records and exam-app hosts | Removed `ip saddr 10.145.10.13 accept` from 3 firewalls | nmap (closed → filtered) |
+| 3 | Vendor WireGuard tunnel routed the whole `10.145.0.0/16` | `AllowedIPs = 10.145.40.20/32` | nmap, ssh from vendor host |
+| 4 | Vendor trusted by database and admin host firewalls | Removed both vendor allow rules | `nft list ruleset`, nmap |
+| 5 | PEP ignored device posture (unmanaged device allowed) | `REQUIRE_DEVICE_POSTURE = True` | curl: 200 → 403 |
+| 6 | PEP exposed `/admin` and `/metrics` to students | `EXPOSE_ADMIN_PATHS = False` | curl: 200 → 404 |
+| 7 | Expired certificate with wrong name (CN/SAN) | Fixed `pki/make_certs.sh` (name + `-days 365`) | openssl, curl: exit 60 → exit 0 |
+| + | Extra: case-sensitive (`/ADMIN`) and URL-encoded (`/%61dmin`) path-filter bypasses | Normalised path (decode + lower-case) before the policy check | curl: 200 → 404 |
 
 ---
 
@@ -82,7 +101,7 @@ The isolated lab environment is allocated the dedicated class B CIDR block `10.1
 | | | `server-support`| `10.145.40.20` | `22/tcp` (SSH) | Designated vendor maintenance host |
 | **DMZ** | `10.145.50.0/24` | `pep` | `10.145.50.10` | `10443/tcp` (HTTPS) | Policy Enforcement Point Gateway |
 | | | `idp` | `10.145.50.11` | `8081/tcp` (HTTP) | HMAC-based Token Authentication Service |
-| **Vendor Zone** | `10.145.60.0/24` | `vendor` | `10.145.60.11` | `51820/udp` | External vendor technician endpoint |
+| **Vendor Zone** | `10.145.60.0/24` | `vendor` | `10.145.60.11` | WireGuard client (peer endpoint `10.145.40.20:51820`) | External vendor technician endpoint |
 
 **Core Service Fully Qualified Domain Names (FQDN):**
 - **Exam Gateway:** `https://exam.engineering.t01.uni.lab:10443`
@@ -123,6 +142,8 @@ zero-trust-hybrid-network-lab/
 └── vendor/
     └── wg0.conf                       # WireGuard VPN client configuration profile
 ```
+
+> The tree above shows the layout of the course lab kit for reference. Files under `pki/out/` (CA and service private keys) must never be committed; see `.gitignore`.
 
 ---
 
@@ -303,7 +324,7 @@ curl -v --cacert /lab/pki/out/ca.crt --resolve exam.engineering.t01.uni.lab:1044
 ### Verified Campus Communication Matrix
 
 | Source Zone / Host | Destination Host | Port / Protocol | Intended Policy | Identity / Device Requirement | Verification Evidence |
-| :--- | :--- | :---: | :--- | :--- |
+| :--- | :--- | :---: | :--- | :--- | :--- |
 | `student` | `examapp` (via PEP) | `10443/tcp` (HTTPS) | **ALLOW** | Valid IdP Bearer token, Managed posture | HTTP 200 OK, exit code 0 ([Fig. B11](docs/images/fig_b11_curl_pep_success.png)) |
 | `student` | `server-db` | `1521/tcp` | **DENY** | None (Direct access prohibited) | All ports `filtered` ([Fig. B7](docs/images/fig_b7_student_scan_after_fix.png)) |
 | `examapp` | `server-db` | `1521/tcp` | **ALLOW** | Workload IP binding (`10.145.20.10`) | Port `1521 open` ([Fig. B10](docs/images/fig_b10_examapp_legitimate_scan.png)) |
@@ -409,7 +430,7 @@ The initial enforcement logic utilized:
 if self.path.startswith(("/admin", "/metrics")) and not EXPOSE_ADMIN_PATHS:
     return self._deny(404, "path not available through student-facing PEP")
 ```
-An attacker submitting `/ADMIN` completely bypassed the prefix check while the backend Python HTTP server treated URLs case-insensitively, serving the admin dashboard!
+An attacker submitting `/ADMIN` bypassed the case-sensitive prefix check, so the PEP forwarded the request upstream (HTTP 200) even though admin paths were meant to be blocked at the student-facing gateway.
 
 <p align="center">
   <img src="docs/images/fig_c15_pep_case_sensitive_bypass.png" alt="Case Bypass Exploit" width="750">
@@ -429,7 +450,7 @@ if self.path.lower().startswith(("/admin", "/metrics")) and not EXPOSE_ADMIN_PAT
 </p>
 
 #### 2. URL-Encoded Path Bypass
-Further testing demonstrated that sending URL-encoded ASCII characters (e.g. `/%61dmin` where `%61` is `a`) bypassed the literal string prefix match on the PEP proxy, while the upstream web framework decoded `%61dmin` into `/admin`!
+Further testing demonstrated that sending URL-encoded ASCII characters (e.g. `/%61dmin` where `%61` is `a`) bypassed the literal string prefix match on the PEP, which forwarded the request upstream (HTTP 200). An upstream that decodes the path would resolve it to `/admin`.
 
 <p align="center">
   <img src="docs/images/fig_c20_pep_url_encoded_bypass.png" alt="URL Encoding Bypass Exploit" width="750">
@@ -442,6 +463,7 @@ Further testing demonstrated that sending URL-encoded ASCII characters (e.g. `/%
 import urllib.parse
 
 # Canonicalize encoding and case before policy validation
+# (illustrative snippet; the exact code is shown in Figure C23 of the report)
 clean_path = urllib.parse.unquote(self.path).lower()
 if clean_path.startswith(("/admin", "/metrics")) and not EXPOSE_ADMIN_PATHS:
     return self._deny(404, "path not available through student-facing PEP")
@@ -643,7 +665,7 @@ Re-testing confirmed clean certificate chain validation:
 
 ### Cryptographic Lifecycle & Key Material Exposure (Q15)
 During audit procedures, we uncovered a significant key-management risk:
-The entire PKI output folder (`pki/out/`), including `ca.key` (Root CA private key) and `exam.key`, was bind-mounted read-write across containers. Any user gaining root in a container could read `ca.key` and forge valid SSL certificates for any university domain!
+The entire PKI output folder (`pki/out/`), including `ca.key` (Root CA private key) and `exam.key`, was mounted into every lab container. Any user gaining root in a container could read `ca.key` and forge valid SSL certificates for any university domain!
 
 <p align="center">
   <img src="docs/images/fig_e9_ca_key_exposed_student.png" alt="CA Key Exposed" width="650">
@@ -736,6 +758,8 @@ Based strictly on empirical evidence gathered in Parts B through F, the universi
 
 ### Executive Management Memo
 
+> Summary version. The full one-page memo (business issue, main risk, evidence, two alternatives, recommendation, accountability and deadline, evidence of success, residual risk) is in the submitted report.
+
 ```text
 MEMORANDUM
 
@@ -746,7 +770,7 @@ SUBJECT:  Zero Trust Architectural Transformation: Hybrid Online Examination Inf
 ```
 
 #### 1. Business Context & Strategic Need
-Jazan University is transitioning the Online Examination System to a hybrid topology to support scalable digital testing while maintaining student records in compliance with national data privacy standards. Under the legacy perimeter security model, trust was implicitly granted based on network location.
+Jazan University is transitioning the Online Examination System to a hybrid topology to support scalable digital testing while keeping sensitive student records on premises. Under the legacy perimeter security model, trust was implicitly granted based on network location.
 
 #### 2. Main Discovered Risks
 Active scanning proved that an attacker compromising an untrusted student laptop, guest mobile device, or vendor technician account could bypass access controls entirely:
@@ -841,6 +865,7 @@ docker compose down -v
 
 ---
 <p align="center">
-  <b>Developed by Team T01 — Jazan University © 2026</b><br>
+  <b>Developed by Team T01 — Jazan University, 2026</b><br>
+  <i>Lab kit designed and built by Dr. Mohammed Jubur (CNET-463).</i><br>
   <i>All security tests and packet captures conducted inside an isolated academic sandbox environment.</i>
 </p>
