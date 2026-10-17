@@ -10,7 +10,7 @@
 
 ---
 
-## 👥 Team Members & Contribution Matrix
+##  Team Members & Contribution Matrix
 
 | Member Name | Assigned Part | Functional Responsibility |
 | :--- | :---: | :--- |
@@ -22,7 +22,7 @@
 
 ---
 
-## 📑 Table of Contents
+##  Table of Contents
 
 1. [Executive Summary & Lab Architecture](#1-executive-summary--lab-architecture)
 2. [Network Parameters & IP Schema](#2-network-parameters--ip-schema)
