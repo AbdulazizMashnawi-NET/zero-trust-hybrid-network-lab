@@ -20,7 +20,7 @@
 | :--- | :---: | :--- |
 | **Abdulaziz Mashnawi** | **Part A & B** | Network Discovery, Vulnerability Assessment, Host Micro-segmentation & nftables Remediation |
 | **Abdullah Abdali** | **Part C** | Policy Enforcement Point (PEP) Policy Audit, Device Posture & Path Security Hardening |
-| **Abdulaziz Difallah Al-Makhlouti** | **Part D & E** | WireGuard Vendor Tunnel Scoping, VPN vs. ZTNA Evaluation, PKI & X.509 Certificate Remediation |
+| **Abdulaziz Difallah Asiri** | **Part D & E** | WireGuard Vendor Tunnel Scoping, VPN vs. ZTNA Evaluation, PKI & X.509 Certificate Remediation |
 | **Khalid Alfaifi** | **Part F** | Cloud/Hybrid Controls, Egress Restrictions, and Cloud Shared Responsibility Framework |
 | **Khalid Al-Qanbar** | **Part G** | CISA ZTMM v2.0 Maturity Assessment, Gap Analysis & Executive Management Memo |
 
@@ -483,7 +483,7 @@ if clean_path.startswith(("/admin", "/metrics")) and not EXPOSE_ADMIN_PATHS:
 ---
 
 ## 7. Part D: Secure Remote Connectivity & WireGuard Scoping
-**Assigned to:** Abdulaziz Difallah Al-Makhlouti
+**Assigned to:** Abdulaziz Difallah Asiri
 
 ### Inspection of Vendor Tunnel Scope (Q8)
 Inspection of `vendor/wg0.conf` revealed an egregious network-level VPN misconfiguration:
@@ -575,7 +575,7 @@ docker compose exec vendor sh -c 'ssh -o ConnectTimeout=5 -o BatchMode=yes test@
 ---
 
 ## 8. Part E: TLS, Public Key Infrastructure (PKI) & Trust Lifecycle
-**Assigned to:** Abdulaziz Difallah Al-Makhlouti
+**Assigned to:** Abdulaziz Difallah Asiri
 
 ### Live Certificate Inspection & Flaw Identification (Q12, Q13)
 We analyzed the TLS certificate presented by the PEP on port `10443` using OpenSSL and cURL:
