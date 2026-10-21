@@ -2,7 +2,6 @@
 
 > **Academic project — Jazan University, CNET-463 Network Security Management (Case Study 2, Team T01).**
 > The lab environment (Docker kit, network topology and deliberately planted weaknesses) was designed and built by **Dr. Mohammed Jubur**. This repository documents our assessment, fixes and evidence only; the lab kit itself is not redistributed here.
-> The full submitted report is available at `docs/Report_Case_Study_T01.pdf`.
  
 <p align="center">
   <img src="https://img.shields.io/badge/Security_Model-Zero_Trust_(NIST_SP_800--207)-blue.svg" alt="Zero Trust">
@@ -341,7 +340,7 @@ curl -v --cacert /lab/pki/out/ca.crt --resolve exam.engineering.t01.uni.lab:1044
 
 **Assigned to:** Abdullah Abdali
 
-## 1. Scope and lab values
+### 1. Scope and Lab Values
 
 All user traffic to the exam service passes through the Policy Enforcement Point (PEP, edge/pep.py). The PEP must make a Zero Trust decision on every request using the token issued by the Identity Provider (IdP), and must never trust the client's own claims or its network location. Our task was to test the PEP's policy, confirm which switches are set wrong, fix them, and prove the fix with before/after evidence.
 
@@ -356,7 +355,7 @@ All user traffic to the exam service passes through the Policy Enforcement Point
 
 **Note:** curl was run with -k because the PEP's certificate is currently invalid (CN=staff.engineering.t01.uni.lab and expired 1 Feb 2024, visible in Figure 7). That certificate problem belongs to Part E; -k does not affect any access decision tested here.
 
-## 2. Step 5 – Legitimate request (baseline)
+### 2. Legitimate Request Baseline
 
 A token was requested from the IdP for user sara, role student, device managed, then presented to the PEP as a Bearer token.
 
@@ -374,7 +373,7 @@ curl -sk --resolve exam.engineering.t01.uni.lab:10443:10.145.50.10 -H "Authoriza
 
 Result: the token has the form user|role|device|signature. The PEP accepted it and forwarded the request to the exam app (HTTP 200). This is the reference request; every attack below changes exactly one element of it.
 
-## 3. Step 6 – Probing the policy (BEFORE fix)
+### 3. Probing the Policy (Before Fix)
 
 ### Attack 1 – Forged identity headers, no token
 
@@ -441,7 +440,7 @@ openssl s_client -connect 10.145.50.10:10443 -tls1_2 </dev/null
 | **/admin and /metrics with student token** | Not reachable    | 200 ALLOW                 | Weakness C2 |
 | **TLS 1.0**                                | Refused          | alert protocol version    | Enforced    |
 
-## 4. Root cause in edge/pep.py
+### 4. Root Cause in edge/pep.py
 
 ![Figure 9](docs/images/fig09_pep-policy-switches-before-fix.jpg)
 
@@ -457,7 +456,7 @@ openssl s_client -connect 10.145.50.10:10443 -tls1_2 </dev/null
 
 The tool results and the code agree: exactly two switches were wrong. The three correct switches were left unchanged, because changing a setting that tests show to be correct adds risk without benefit.
 
-## 5. Step 7 – Fix
+### 5. Step 7 – Fix
 
 Two lines were changed in edge/pep.py, then the PEP was restarted so it reloaded the file:
 
@@ -474,7 +473,7 @@ docker compose restart pep
 
 *Figure 10 – edge/pep.py policy switches AFTER the fix (REQUIRE_DEVICE_POSTURE = True, EXPOSE_ADMIN_PATHS = False)*
 
-## 6. Verification (AFTER fix)
+### 6. Verification (After Fix)
 
 New tokens were requested (TOKEN for managed, TOKEN_U for unmanaged) and the same commands were repeated.
 
@@ -496,7 +495,7 @@ New tokens were requested (TOKEN for managed, TOKEN_U for unmanaged) and the sam
 
 Both weaknesses are closed, and the legitimate request still succeeds, so the fix did not break permitted access.
 
-## 7. Weakness explanations
+### 7. Weakness Explanations
 
 ### C1 – Device posture not enforced
 
@@ -518,7 +517,7 @@ Both weaknesses are closed, and the legitimate request still succeeds, so the fi
 
 - **Proof:** both paths now return 404 (Figures 12–13); /exam still returns 200 (Figure 14).
 
-## 8. Access conditions (tested)
+### 8. Access Conditions (Tested)
 
 | Subject / role                            | Device      | Resource | Context       | Decision | Evidence (curl / openssl)               |
 |-----------------------------------------------|-----------------|--------------|-------------------|--------------|---------------------------------------------|
@@ -531,14 +530,14 @@ Both weaknesses are closed, and the legitimate request still succeeds, so the fi
 | **Any client**                                | —               | PEP TLS      | TLS 1.0           | Deny         | alert protocol version (Fig. 6)             |
 | **Any client**                                | —               | PEP TLS      | TLS 1.2           | Allow        | ECDHE-RSA-AES256-GCM-SHA384 (Fig. 8)        |
 
-## 9. Why these fixes, and alternatives considered
+### 9. Why These Fixes & Alternatives Considered
 
 | Weakness          | Fix applied                                    | Alternative                                                   | Why we chose the applied fix                                                                                                                                                                                                                                                                            |
 |-----------------------|----------------------------------------------------|-------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | **C1 Device posture** | Deny unmanaged devices (403)                       | Challenge: redirect to device remediation or step-up verification | The assignment accepts deny or challenge. Deny uses the existing switch with no new code and gives clear evidence. Challenge needs device-management infrastructure. Trade-off: students on unmanaged personal devices are blocked, so the university must provide managed devices or an enrolment process. |
 | **C2 Admin paths**    | Block /admin and /metrics at the student PEP (404) | Allow these paths only for tokens with role=admin                 | Admins already have a dedicated path (admin zone, SSH to the jump host). Exposing admin functions on the student entry point, even only for admins, enlarges the attack surface.                                                                                                                            |
 
-## 10. Additional finding – case-sensitive path check (beyond required tests)
+### 10. Additional Finding: Case-Sensitive Path Check
 
 The path check used self.path.startswith(("/admin", "/metrics")), which is case-sensitive. We tested an upper-case variant after fixing C2.
 
@@ -564,7 +563,7 @@ The path check used self.path.startswith(("/admin", "/metrics")), which is case-
 
 Fix: the path is converted to lower case before comparison, so /ADMIN, /Admin and /admin are all treated the same. After restarting the PEP, /ADMIN is denied (Figure 18) and the legitimate /exam request still succeeds (Figure 19).
 
-## 11. Additional finding – URL-encoded path bypass (beyond required tests)
+### 11. Additional Finding: URL-Encoded Path Bypass
 
 After the .lower() change, the path check still compared the raw, percent-encoded path. %61 is the URL encoding of the letter "a", so /%61dmin did not match /admin and passed the check, while the exam app decoded it to /admin. We tested this variant with curl --path-as-is so that curl sent the path unchanged.
 
@@ -594,7 +593,7 @@ After the .lower() change, the path check still compared the raw, percent-encode
 
 Fix: the path is URL-decoded with urllib.parse.unquote() and then converted to lower case before comparison, so /%61dmin, /ADMIN and /admin are all treated the same. After restarting the PEP, /%61dmin is denied (Figure 24) and the legitimate /exam request still succeeds (Figure 25).
 
-## 12. Residual risks
+### 12. Residual Risks
 
 ### R1 – IdP issues tokens without authentication (tested)
 
@@ -614,7 +613,7 @@ The IdP returned a validly signed token for user "hacker" with role admin and de
 
 - **R4 – Unencrypted PEP-to-app hop:** UPSTREAM is http://10.145.20.10:80. The exam app relies on host-firewall segmentation (Part B) so that only the PEP can reach it.
 
-## 13. Zero Trust link
+### 13. Alignment with Zero Trust Principles
 
 This part applies the Zero Trust principle "never trust, always verify": being on the campus network gives no access. Every request is evaluated on identity (signed IdP token), device posture and requested resource, at the PEP, which is the policy enforcement component described in NIST SP 800-207. The result of the PEP's decision is the same whatever network location the request comes from
 
