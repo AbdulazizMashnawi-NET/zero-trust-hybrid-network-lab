@@ -1,8 +1,7 @@
 # Zero Trust Hybrid University Network — Security Assessment & Remediation Lab
 
 > **Academic project — Jazan University, CNET-463 Network Security Management (Case Study 2, Team T01).**
-> The lab environment (Docker kit, network topology and deliberately planted weaknesses) was designed and built by **Dr. Mohammed Jubur**. This repository documents our assessment, fixes and evidence only; the lab kit itself is not redistributed here.
- 
+> The lab environment (Docker kit, network topology and deliberately planted weaknesses) was designed and built by **Dr. Mohammed Jubur**. 
 <p align="center">
   <img src="https://img.shields.io/badge/Security_Model-Zero_Trust_(NIST_SP_800--207)-blue.svg" alt="Zero Trust">
   <img src="https://img.shields.io/badge/Maturity-CISA_ZTMM_v2.0-orange.svg" alt="CISA ZTMM">
