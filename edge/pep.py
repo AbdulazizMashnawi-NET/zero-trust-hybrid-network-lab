@@ -11,8 +11,7 @@ The four policy switches below are what your team must get right. Read them,
 test them with curl, and fix the ones that are wrong. After editing:
     docker compose restart pep
 """
-import http.server, socketserver, ssl, urllib.request, hmac, hashlib, os, json
-
+import http.server, socketserver, ssl, urllib.request, urllib.parse, hmac, hashlib, os, json
 TEAM        = os.environ.get("TEAM", "T01")
 EXAM_FQDN   = "exam.engineering.t01.uni.lab"
 IDP_URL     = "http://10.145.50.11:8081"
@@ -26,8 +25,8 @@ SHARED_SECRET = b"idp-pep-shared-secret-T01"
 TLS_MIN_VERSION        = ssl.TLSVersion.TLSv1_2   # lowest TLS version the PEP accepts
 TLS_CIPHERS            = "DEFAULT"   # OpenSSL cipher string / security level
 TRUST_CLIENT_HEADERS   = False   # accept identity headers (X-User/X-Role/X-Device) from the client if no token?
-REQUIRE_DEVICE_POSTURE = False   # require the token's device claim to be 'managed'?
-EXPOSE_ADMIN_PATHS     = True   # route /admin and /metrics through this PEP?
+REQUIRE_DEVICE_POSTURE = True   # require the token's device claim to be 'managed'?
+EXPOSE_ADMIN_PATHS     = False  # route /admin and /metrics through this PEP?
 # ---------------------------------------------------------------------------
 
 
@@ -59,7 +58,7 @@ class PEP(http.server.BaseHTTPRequestHandler):
 
     def do_GET(self):
         # Path policy -------------------------------------------------------
-        if self.path.startswith(("/admin", "/metrics")) and not EXPOSE_ADMIN_PATHS:
+        if urllib.parse.unquote(self.path).lower().startswith(("/admin", "/metrics")) and not EXPOSE_ADMIN_PATHS:
             return self._deny(404, "path not available through student-facing PEP")
 
         # Identity ----------------------------------------------------------
