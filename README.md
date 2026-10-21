@@ -337,9 +337,8 @@ curl -v --cacert /lab/pki/out/ca.crt --resolve exam.engineering.t01.uni.lab:1044
 ---
 
 ## 6. Part C: Policy Enforcement Point (PEP) Hardening
-**Assigned to:** Abdullah Abdali
 
-
+Assigned to: Abdullah Abdali
 1. Scope and lab values
 All user traffic to the exam service passes through the Policy Enforcement Point (PEP, edge/pep.py). The PEP must make a Zero Trust decision on every request using the token issued by the Identity Provider (IdP), and must never trust the client's own claims or its network location. Our task was to test the PEP's policy, confirm which switches are set wrong, fix them, and prove the fix with before/after evidence.
 Item	Team T01 value (from TEAM_INFO.txt)
@@ -358,39 +357,39 @@ TOKEN=$(curl -s "http://10.145.50.11:8081/token?user=sara&role=student&device=ma
 ```bash
 curl -sk --resolve exam.engineering.t01.uni.lab:10443:10.145.50.10 -H "Authorization: Bearer $TOKEN" -w "\nHTTP_CODE=%{http_code}\n" https://exam.engineering.t01.uni.lab:10443/exam
 ```
-![Figure 1](images/fig01_legitimate-request-sara-student-managed-200.jpg)
+![Figure 1](docs/images/images/fig01_legitimate-request-sara-student-managed-200.jpg)
 Figure 1 – Legitimate request (sara / student / managed) → HTTP 200 ALLOW
 Result: the token has the form user|role|device|signature. The PEP accepted it and forwarded the request to the exam app (HTTP 200). This is the reference request; every attack below changes exactly one element of it.
 3. Step 6 – Probing the policy (BEFORE fix)
 Attack 1 – Forged identity headers, no token
 Reading edge/pep.py shows that the only client headers the PEP could believe are X-User, X-Role and X-Device (used only if TRUST_CLIENT_HEADERS is True). All three were sent without any token.
-![Figure 2](images/fig02_attack1-forged-headers-no-token-401.jpg)
+![Figure 2](docs/images/images/fig02_attack1-forged-headers-no-token-401.jpg)
 Figure 2 – Attack 1: forged X-User/X-Role/X-Device headers, no token → HTTP 401 DENY
 Result: 401 "no valid IdP token". The PEP does not trust client-supplied identity. Already enforced – no weakness.
 Attack 2 – Valid token with device posture "unmanaged"
-![Figure 3](images/fig03_attack2-before-unmanaged-device-200.jpg)
+![Figure 3](docs/images/images/fig03_attack2-before-unmanaged-device-200.jpg)
 Figure 3 – Attack 2 (BEFORE): token with device=unmanaged → HTTP 200 ALLOW
 Result: 200 ALLOW. The PEP admitted a device that is not managed. Weakness C1 confirmed.
 Attack 3 – Administrative paths through the student PEP
-![Figure 4](images/fig04_attack3-before-admin-student-token-200.jpg)
+![Figure 4](docs/images/images/fig04_attack3-before-admin-student-token-200.jpg)
 Figure 4 – Attack 3 (BEFORE): student token on /admin → HTTP 200 ALLOW
-![Figure 5](images/fig05_attack3-before-metrics-student-token-200.jpg)
+![Figure 5](docs/images/images/fig05_attack3-before-metrics-student-token-200.jpg)
 Figure 5 – Attack 3 (BEFORE): student token on /metrics → HTTP 200 ALLOW
 Result: both administrative paths were forwarded for a student token. Weakness C2 confirmed.
 Attack 4 – Deprecated TLS version
 ```bash
 openssl s_client -connect 10.145.50.10:10443 -tls1 -cipher 'DEFAULT:@SECLEVEL=0' </dev/null
 ```
-![Figure 6](images/fig06_attack4-tls10-handshake-refused.jpg)
+![Figure 6](docs/images/images/fig06_attack4-tls10-handshake-refused.jpg)
 Figure 6 – Attack 4: TLS 1.0 handshake → "alert protocol version", Cipher is (NONE)
 Result: the server refused TLS 1.0 ("tlsv1 alert protocol version", "Cipher is (NONE)"). The line "Protocol : TLSv1" only shows what our client attempted, and "Verification: OK" is meaningless here because no certificate was received. Already enforced – no weakness.
 For comparison, a TLS 1.2 handshake was accepted:
 ```bash
 openssl s_client -connect 10.145.50.10:10443 -tls1_2 </dev/null
 ```
-![Figure 7](images/fig07_tls12-comparison-part1-expired-certificate.jpg)
+![Figure 7](docs/images/images/fig07_tls12-comparison-part1-expired-certificate.jpg)
 Figure 7 – TLS 1.2 comparison (part 1): certificate CN=staff.engineering.t01.uni.lab, expired (Part E issue)
-![Figure 8](images/fig08_tls12-comparison-part2-accepted.jpg)
+![Figure 8](docs/images/images/fig08_tls12-comparison-part2-accepted.jpg)
 Figure 8 – TLS 1.2 comparison (part 2): "New, TLSv1.2, Cipher is ECDHE-RSA-AES256-GCM-SHA384" – accepted
 Summary of probes
 Probe	Expected	Observed (before fix)	Verdict
@@ -399,7 +398,7 @@ Token with device=unmanaged	Deny / challenge	200 ALLOW	Weakness C1
 /admin and /metrics with student token	Not reachable	200 ALLOW	Weakness C2
 TLS 1.0	Refused	alert protocol version	Enforced
 4. Root cause in edge/pep.py
-![Figure 9](images/fig09_pep-policy-switches-before-fix.jpg)
+![Figure 9](docs/images/images/fig09_pep-policy-switches-before-fix.jpg)
 Figure 9 – edge/pep.py policy switches BEFORE the fix
 Switch	Value found	Matching test	Assessment
 TLS_MIN_VERSION	TLSv1_2	Attack 4 refused	Correct
@@ -417,17 +416,17 @@ EXPOSE_ADMIN_PATHS     = False   # was True
 ```bash
 docker compose restart pep
 ```
-![Figure 10](images/fig10_pep-policy-switches-after-fix.png)
+![Figure 10](docs/images/images/fig10_pep-policy-switches-after-fix.png)
 Figure 10 – edge/pep.py policy switches AFTER the fix (REQUIRE_DEVICE_POSTURE = True, EXPOSE_ADMIN_PATHS = False)
 6. Verification (AFTER fix)
 New tokens were requested (TOKEN for managed, TOKEN_U for unmanaged) and the same commands were repeated.
-![Figure 11](images/fig11_attack2-after-unmanaged-403.jpg)
+![Figure 11](docs/images/images/fig11_attack2-after-unmanaged-403.jpg)
 Figure 11 – Attack 2 (AFTER): device=unmanaged → HTTP 403 "device posture 'unmanaged' not permitted"
-![Figure 12](images/fig12_attack3-after-admin-404.jpg)
+![Figure 12](docs/images/images/fig12_attack3-after-admin-404.jpg)
 Figure 12 – Attack 3 (AFTER): /admin → HTTP 404 "path not available through student-facing PEP"
-![Figure 13](images/fig13_attack3-after-metrics-404.jpg)
+![Figure 13](docs/images/images/fig13_attack3-after-metrics-404.jpg)
 Figure 13 – Attack 3 (AFTER): /metrics → HTTP 404
-![Figure 14](images/fig14_legitimate-request-after-fix-200.jpg)
+![Figure 14](docs/images/images/fig14_legitimate-request-after-fix-200.jpg)
 Figure 14 – Legitimate request (AFTER): sara / student / managed on /exam → HTTP 200 ALLOW
 Both weaknesses are closed, and the legitimate request still succeeds, so the fix did not break permitted access.
 7. Weakness explanations
@@ -457,35 +456,35 @@ C1 Device posture	Deny unmanaged devices (403)	Challenge: redirect to device rem
 C2 Admin paths	Block /admin and /metrics at the student PEP (404)	Allow these paths only for tokens with role=admin	Admins already have a dedicated path (admin zone, SSH to the jump host). Exposing admin functions on the student entry point, even only for admins, enlarges the attack surface.
 10. Additional finding – case-sensitive path check (beyond required tests)
 The path check used self.path.startswith(("/admin", "/metrics")), which is case-sensitive. We tested an upper-case variant after fixing C2.
-![Figure 15](images/fig15_additional-before-ADMIN-uppercase-200.jpg)
+![Figure 15](docs/images/images/fig15_additional-before-ADMIN-uppercase-200.jpg)
 Figure 15 – Additional (BEFORE): /ADMIN with student token → HTTP 200 ALLOW (bypass)
-![Figure 16](images/fig16_path-check-before-change.jpg)
+![Figure 16](docs/images/images/fig16_path-check-before-change.jpg)
 Figure 16 – Path check in edge/pep.py BEFORE the change
-![Figure 17](images/fig17_path-check-after-lower.jpg)
+![Figure 17](docs/images/images/fig17_path-check-after-lower.jpg)
 Figure 17 – Path check in edge/pep.py AFTER the change (.lower() added)
-![Figure 18](images/fig18_additional-after-ADMIN-404.jpg)
+![Figure 18](docs/images/images/fig18_additional-after-ADMIN-404.jpg)
 Figure 18 – Additional (AFTER): /ADMIN → HTTP 404 DENY
-![Figure 19](images/fig19_legitimate-request-after-lower-200.png)
+![Figure 19](docs/images/images/fig19_legitimate-request-after-lower-200.png)
 Figure 19 – Legitimate request after the .lower() change: /exam → HTTP 200 ALLOW
 Fix: the path is converted to lower case before comparison, so /ADMIN, /Admin and /admin are all treated the same. After restarting the PEP, /ADMIN is denied (Figure 18) and the legitimate /exam request still succeeds (Figure 19).
 11. Additional finding – URL-encoded path bypass (beyond required tests)
 After the .lower() change, the path check still compared the raw, percent-encoded path. %61 is the URL encoding of the letter "a", so /%61dmin did not match /admin and passed the check, while the exam app decoded it to /admin. We tested this variant with curl --path-as-is so that curl sent the path unchanged.
-![Figure 20](images/fig20_additional-before-encoded-61dmin-200.png)
+![Figure 20](docs/images/images/fig20_additional-before-encoded-61dmin-200.png)
 Figure 20 – Additional (BEFORE): /%61dmin with student token → HTTP 200 ALLOW (bypass)
-![Figure 21](images/fig21_imports-before-change.png)
+![Figure 21](docs/images/images/fig21_imports-before-change.png)
 Figure 21 – Imports in edge/pep.py BEFORE the change
-![Figure 22](images/fig22_imports-after-urllib-parse.png)
+![Figure 22](docs/images/images/fig22_imports-after-urllib-parse.png)
 Figure 22 – Imports in edge/pep.py AFTER the change (urllib.parse added)
-![Figure 23](images/fig23_path-check-after-unquote.png)
+![Figure 23](docs/images/images/fig23_path-check-after-unquote.png)
 Figure 23 – Path check in edge/pep.py AFTER the change (urllib.parse.unquote() added)
-![Figure 24](images/fig24_additional-after-encoded-61dmin-404.png)
+![Figure 24](docs/images/images/fig24_additional-after-encoded-61dmin-404.png)
 Figure 24 – Additional (AFTER): /%61dmin → HTTP 404 DENY
-![Figure 25](images/fig25_legitimate-request-after-unquote-200.png)
+![Figure 25](docs/images/images/fig25_legitimate-request-after-unquote-200.png)
 Figure 25 – Legitimate request after the unquote() change: /exam → HTTP 200 ALLOW
 Fix: the path is URL-decoded with urllib.parse.unquote() and then converted to lower case before comparison, so /%61dmin, /ADMIN and /admin are all treated the same. After restarting the PEP, /%61dmin is denied (Figure 24) and the legitimate /exam request still succeeds (Figure 25).
 12. Residual risks
 R1 – IdP issues tokens without authentication (tested)
-![Figure 26](images/fig26_idp-issues-token-hacker-admin-managed.jpg)
+![Figure 26](docs/images/images/fig26_idp-issues-token-hacker-admin-managed.jpg)
 Figure 26 – Additional: IdP issued a signed token for hacker / admin / managed on request
 The IdP returned a validly signed token for user "hacker" with role admin and device managed, with no password or any other check. The PEP correctly verifies the signature, but it cannot know that the IdP never verified the user, role or device. Consequence: the device-posture control fixed in C1 can be bypassed by simply requesting device=managed. The IdP is not among the files we may modify, so this is documented, not fixed.
 Recommendation: the IdP must authenticate users (password + MFA), take roles from a directory rather than from the request, obtain device posture from a device-management (MDM) system, and issue short-lived tokens.
