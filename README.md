@@ -339,148 +339,162 @@ curl -v --cacert /lab/pki/out/ca.crt --resolve exam.engineering.t01.uni.lab:1044
 ## 6. Part C: Policy Enforcement Point (PEP) Hardening
 **Assigned to:** Abdullah Abdali
 
-### PEP Policy Baseline & Probing (Pre-Fix)
-The PEP (`edge/pep.py`) acts as the Zero Trust gateway fronting `examapp`. We subjected the PEP to systematic penetration tests:
 
-<p align="center">
-  <img src="docs/images/fig_c1_pep_legitimate_request.png" alt="Legitimate Request" width="750">
-  <br>
-  <em>Figure C1: Baseline request with valid student token -> HTTP 200 ALLOW.</em>
-</p>
-
-1. **Attack 1 (Header Spoofing without Token):** Injected client claims `X-User: admin`, `X-Role: admin`, `X-Device: managed`.
-   - *Result:* `HTTP 401 Unauthorized` ("no valid IdP token"). Policy already enforced.
-2. **Attack 2 (Unmanaged Device Token):** Acquired valid token with `device=unmanaged`.
-   - *Result:* `HTTP 200 OK` (Vulnerability **C1**: device posture ignored).
-3. **Attack 3 (Administrative Endpoints via Student Gateway):** Sent valid student token to `/admin` and `/metrics`.
-   - *Result:* `HTTP 200 OK` (Vulnerability **C2**: administrative paths exposed to students).
-4. **Attack 4 (Deprecated TLS 1.0 Handshake):** Evaluated cipher suite and protocol negotiation.
-   - *Result:* PEP rejected connection with `tlsv1 alert protocol version`, strictly enforcing modern TLS.
-
-<table align="center">
-  <tr>
-    <td align="center"><b>Attack 1: Header Spoofing (401 Denied)</b></td>
-    <td align="center"><b>Attack 2: Unmanaged Device (200 Allowed - Exploit)</b></td>
-  </tr>
-  <tr>
-    <td><img src="docs/images/fig_c2_pep_forged_headers_401.png" width="400"></td>
-    <td><img src="docs/images/fig_c3_pep_unmanaged_200_before.png" width="400"></td>
-  </tr>
-  <tr>
-    <td align="center"><b>Attack 3a: /admin Path (200 Allowed - Exploit)</b></td>
-    <td align="center"><b>Attack 3b: /metrics Path (200 Allowed - Exploit)</b></td>
-  </tr>
-  <tr>
-    <td><img src="docs/images/fig_c4_pep_admin_path_200_before.png" width="400"></td>
-    <td><img src="docs/images/fig_c5_pep_metrics_path_200_before.png" width="400"></td>
-  </tr>
-</table>
-
-### Root Cause Analysis & Configuration Hardening
-Inspection of configuration flags in `edge/pep.py`:
-
-```python
-# BEFORE (edge/pep.py)
-REQUIRE_DEVICE_POSTURE = False     # Defect: Bypassed endpoint compliance checks
-EXPOSE_ADMIN_PATHS     = True      # Defect: Exposed internal admin endpoints
+1. Scope and lab values
+All user traffic to the exam service passes through the Policy Enforcement Point (PEP, edge/pep.py). The PEP must make a Zero Trust decision on every request using the token issued by the Identity Provider (IdP), and must never trust the client's own claims or its network location. Our task was to test the PEP's policy, confirm which switches are set wrong, fix them, and prove the fix with before/after evidence.
+Item	Team T01 value (from TEAM_INFO.txt)
+Test host	student – 10.145.10.11 (User zone)
+PEP	10.145.50.10, HTTPS port 10443
+Exam service name	exam.engineering.t01.uni.lab
+Identity Provider	http://10.145.50.11:8081/token
+File edited	edge/pep.py (allowed file), then: docker compose restart pep
+Tools used	curl (HTTP requests), openssl s_client (TLS test), docker compose, text editor
+Note: curl was run with -k because the PEP's certificate is currently invalid (CN=staff.engineering.t01.uni.lab and expired 1 Feb 2024, visible in Figure 7). That certificate problem belongs to Part E; -k does not affect any access decision tested here.
+2. Step 5 – Legitimate request (baseline)
+A token was requested from the IdP for user sara, role student, device managed, then presented to the PEP as a Bearer token.
+```bash
+TOKEN=$(curl -s "http://10.145.50.11:8081/token?user=sara&role=student&device=managed")
 ```
-
-<p align="center">
-  <img src="docs/images/fig_c9_pep_switches_before.png" alt="Switches Before" width="700">
-  <br>
-  <em>Figure C9: Misconfigured policy switches in edge/pep.py.</em>
-</p>
-
-We modified `edge/pep.py` to enforce strict verification:
-```python
-# AFTER (edge/pep.py)
-REQUIRE_DEVICE_POSTURE = True      # Enforce managed device posture
-EXPOSE_ADMIN_PATHS     = False     # Block admin routes on student-facing gateway
+```bash
+curl -sk --resolve exam.engineering.t01.uni.lab:10443:10.145.50.10 -H "Authorization: Bearer $TOKEN" -w "\nHTTP_CODE=%{http_code}\n" https://exam.engineering.t01.uni.lab:10443/exam
 ```
-
-<p align="center">
-  <img src="docs/images/fig_c10_pep_switches_after.png" alt="Switches After" width="700">
-  <br>
-  <em>Figure C10: Remediated policy switches in edge/pep.py.</em>
-</p>
-
-### Verification of Core Fixes
-Re-running the identical attacks verified that both vulnerabilities were closed without disrupting legitimate students:
-- `device=unmanaged` -> `HTTP 403 Forbidden` ("device posture 'unmanaged' not permitted").
-- `/admin` & `/metrics` -> `HTTP 404 Not Found` ("path not available through student-facing PEP").
-- Valid request -> `HTTP 200 OK`.
-
-<table align="center">
-  <tr>
-    <td align="center"><b>Attack 2 Post-Fix: 403 Forbidden</b></td>
-    <td align="center"><b>Attack 3 Post-Fix: 404 Not Found</b></td>
-  </tr>
-  <tr>
-    <td><img src="docs/images/fig_c11_pep_unmanaged_403_after.png" width="400"></td>
-    <td><img src="docs/images/fig_c12_pep_admin_404_after.png" width="400"></td>
-  </tr>
-</table>
-
-### Advanced Vulnerability Discovery: Beyond Required Tests
-Our team conducted thorough fuzzing beyond standard curriculum requirements, discovering two critical bypass vectors:
-
-#### 1. Case-Sensitivity Bypass
-The initial enforcement logic utilized:
-```python
-if self.path.startswith(("/admin", "/metrics")) and not EXPOSE_ADMIN_PATHS:
-    return self._deny(404, "path not available through student-facing PEP")
+![Figure 1](images/fig01_legitimate-request-sara-student-managed-200.jpg)
+Figure 1 – Legitimate request (sara / student / managed) → HTTP 200 ALLOW
+Result: the token has the form user|role|device|signature. The PEP accepted it and forwarded the request to the exam app (HTTP 200). This is the reference request; every attack below changes exactly one element of it.
+3. Step 6 – Probing the policy (BEFORE fix)
+Attack 1 – Forged identity headers, no token
+Reading edge/pep.py shows that the only client headers the PEP could believe are X-User, X-Role and X-Device (used only if TRUST_CLIENT_HEADERS is True). All three were sent without any token.
+![Figure 2](images/fig02_attack1-forged-headers-no-token-401.jpg)
+Figure 2 – Attack 1: forged X-User/X-Role/X-Device headers, no token → HTTP 401 DENY
+Result: 401 "no valid IdP token". The PEP does not trust client-supplied identity. Already enforced – no weakness.
+Attack 2 – Valid token with device posture "unmanaged"
+![Figure 3](images/fig03_attack2-before-unmanaged-device-200.jpg)
+Figure 3 – Attack 2 (BEFORE): token with device=unmanaged → HTTP 200 ALLOW
+Result: 200 ALLOW. The PEP admitted a device that is not managed. Weakness C1 confirmed.
+Attack 3 – Administrative paths through the student PEP
+![Figure 4](images/fig04_attack3-before-admin-student-token-200.jpg)
+Figure 4 – Attack 3 (BEFORE): student token on /admin → HTTP 200 ALLOW
+![Figure 5](images/fig05_attack3-before-metrics-student-token-200.jpg)
+Figure 5 – Attack 3 (BEFORE): student token on /metrics → HTTP 200 ALLOW
+Result: both administrative paths were forwarded for a student token. Weakness C2 confirmed.
+Attack 4 – Deprecated TLS version
+```bash
+openssl s_client -connect 10.145.50.10:10443 -tls1 -cipher 'DEFAULT:@SECLEVEL=0' </dev/null
 ```
-An attacker submitting `/ADMIN` bypassed the case-sensitive prefix check, so the PEP forwarded the request upstream (HTTP 200) even though admin paths were meant to be blocked at the student-facing gateway.
-
-<p align="center">
-  <img src="docs/images/fig_c15_pep_case_sensitive_bypass.png" alt="Case Bypass Exploit" width="750">
-  <br>
-  <em>Figure C15: Exploit demonstration — HTTP 200 OK accessing /ADMIN despite EXPOSE_ADMIN_PATHS=False.</em>
-</p>
-
-**Remediation:** Enforced case canonicalization using `.lower()`:
-```python
-if self.path.lower().startswith(("/admin", "/metrics")) and not EXPOSE_ADMIN_PATHS:
-    return self._deny(404, "path not available through student-facing PEP")
+![Figure 6](images/fig06_attack4-tls10-handshake-refused.jpg)
+Figure 6 – Attack 4: TLS 1.0 handshake → "alert protocol version", Cipher is (NONE)
+Result: the server refused TLS 1.0 ("tlsv1 alert protocol version", "Cipher is (NONE)"). The line "Protocol : TLSv1" only shows what our client attempted, and "Verification: OK" is meaningless here because no certificate was received. Already enforced – no weakness.
+For comparison, a TLS 1.2 handshake was accepted:
+```bash
+openssl s_client -connect 10.145.50.10:10443 -tls1_2 </dev/null
 ```
-<p align="center">
-  <img src="docs/images/fig_c18_pep_admin_case_fix_404.png" alt="Case Bypass Fixed" width="750">
-  <br>
-  <em>Figure C18: /ADMIN now returns HTTP 404 Not Found.</em>
-</p>
-
-#### 2. URL-Encoded Path Bypass
-Further testing demonstrated that sending URL-encoded ASCII characters (e.g. `/%61dmin` where `%61` is `a`) bypassed the literal string prefix match on the PEP, which forwarded the request upstream (HTTP 200). An upstream that decodes the path would resolve it to `/admin`.
-
-<p align="center">
-  <img src="docs/images/fig_c20_pep_url_encoded_bypass.png" alt="URL Encoding Bypass Exploit" width="750">
-  <br>
-  <em>Figure C20: Exploit demonstration — URL-encoded /%61dmin bypasses filter with HTTP 200 OK.</em>
-</p>
-
-**Remediation:** Integrated URL decoding via `urllib.parse.unquote` prior to path evaluation:
+![Figure 7](images/fig07_tls12-comparison-part1-expired-certificate.jpg)
+Figure 7 – TLS 1.2 comparison (part 1): certificate CN=staff.engineering.t01.uni.lab, expired (Part E issue)
+![Figure 8](images/fig08_tls12-comparison-part2-accepted.jpg)
+Figure 8 – TLS 1.2 comparison (part 2): "New, TLSv1.2, Cipher is ECDHE-RSA-AES256-GCM-SHA384" – accepted
+Summary of probes
+Probe	Expected	Observed (before fix)	Verdict
+Forged headers, no token	401	401 DENY	Enforced
+Token with device=unmanaged	Deny / challenge	200 ALLOW	Weakness C1
+/admin and /metrics with student token	Not reachable	200 ALLOW	Weakness C2
+TLS 1.0	Refused	alert protocol version	Enforced
+4. Root cause in edge/pep.py
+![Figure 9](images/fig09_pep-policy-switches-before-fix.jpg)
+Figure 9 – edge/pep.py policy switches BEFORE the fix
+Switch	Value found	Matching test	Assessment
+TLS_MIN_VERSION	TLSv1_2	Attack 4 refused	Correct
+TLS_CIPHERS	"DEFAULT"	TLS 1.2 strong cipher negotiated	No evidence of weakness
+TRUST_CLIENT_HEADERS	False	Attack 1 → 401	Correct
+REQUIRE_DEVICE_POSTURE	False	Attack 2 → 200	Wrong – must be True
+EXPOSE_ADMIN_PATHS	True	Attack 3 → 200	Wrong – must be False
+The tool results and the code agree: exactly two switches were wrong. The three correct switches were left unchanged, because changing a setting that tests show to be correct adds risk without benefit.
+5. Step 7 – Fix
+Two lines were changed in edge/pep.py, then the PEP was restarted so it reloaded the file:
 ```python
-import urllib.parse
-
-# Canonicalize encoding and case before policy validation
-# (illustrative snippet; the exact code is shown in Figure C23 of the report)
-clean_path = urllib.parse.unquote(self.path).lower()
-if clean_path.startswith(("/admin", "/metrics")) and not EXPOSE_ADMIN_PATHS:
-    return self._deny(404, "path not available through student-facing PEP")
+REQUIRE_DEVICE_POSTURE = True    # was False
+EXPOSE_ADMIN_PATHS     = False   # was True
 ```
-
-<p align="center">
-  <img src="docs/images/fig_c24_pep_url_encoded_fix_404.png" alt="URL Encoding Bypass Fixed" width="750">
-  <br>
-  <em>Figure C24: URL-encoded exploit /%61dmin cleanly blocked with HTTP 404 Not Found.</em>
-</p>
-
-### PEP Residual Risks
-- **R1 (Unauthenticated IdP Token Generation):** The IdP issues signed tokens without credential validation (e.g. issuing `user=hacker&role=admin&device=managed` upon simple GET request, shown in [Figure C26](docs/images/fig_c26_idp_unauthenticated_token.png)).
-- **R2 (Static Pre-Shared Key):** `SHARED_SECRET` is stored in plaintext within source files rather than fetched from an external Vault/KMS.
-- **R3 (Lack of Token Lifespan):** HMAC tokens lack `exp` timestamps, allowing indefinite replay if intercepted.
-
----
+```bash
+docker compose restart pep
+```
+![Figure 10](images/fig10_pep-policy-switches-after-fix.png)
+Figure 10 – edge/pep.py policy switches AFTER the fix (REQUIRE_DEVICE_POSTURE = True, EXPOSE_ADMIN_PATHS = False)
+6. Verification (AFTER fix)
+New tokens were requested (TOKEN for managed, TOKEN_U for unmanaged) and the same commands were repeated.
+![Figure 11](images/fig11_attack2-after-unmanaged-403.jpg)
+Figure 11 – Attack 2 (AFTER): device=unmanaged → HTTP 403 "device posture 'unmanaged' not permitted"
+![Figure 12](images/fig12_attack3-after-admin-404.jpg)
+Figure 12 – Attack 3 (AFTER): /admin → HTTP 404 "path not available through student-facing PEP"
+![Figure 13](images/fig13_attack3-after-metrics-404.jpg)
+Figure 13 – Attack 3 (AFTER): /metrics → HTTP 404
+![Figure 14](images/fig14_legitimate-request-after-fix-200.jpg)
+Figure 14 – Legitimate request (AFTER): sara / student / managed on /exam → HTTP 200 ALLOW
+Both weaknesses are closed, and the legitimate request still succeeds, so the fix did not break permitted access.
+7. Weakness explanations
+C1 – Device posture not enforced
+Problem: REQUIRE_DEVICE_POSTURE = False, so a validly signed token with device=unmanaged reached the exam (200, Figure 3).
+Why dangerous: management requires that access depend on verified identity and device posture. Identity alone is not enough: an unmanaged device may be unpatched or compromised and could leak exam content or a session.
+Fix: REQUIRE_DEVICE_POSTURE = True.
+Proof: unmanaged now gets 403 (Figure 11); managed still gets 200 (Figure 14).
+C2 – Administrative paths exposed through the student PEP
+Problem: EXPOSE_ADMIN_PATHS = True, so /admin and /metrics were forwarded for a student token (200, Figures 4–5).
+Why dangerous: it breaks least privilege and the requirement that privileged access be reachable only from the admin path. It also widens the attack surface of the student-facing entry point.
+Fix: EXPOSE_ADMIN_PATHS = False.
+Proof: both paths now return 404 (Figures 12–13); /exam still returns 200 (Figure 14).
+8. Access conditions (tested)
+Subject / role	Device	Resource	Context	Decision	Evidence (curl / openssl)
+sara / student	managed	/exam	Valid IdP token	Allow	200 ALLOW (Fig. 1, Fig. 14)
+No identity (forged X-User/X-Role: admin)	claimed managed	/exam	No token	Deny	401 no valid IdP token (Fig. 2)
+sara / student	unmanaged	/exam	Valid IdP token	Deny	Before: 200 (Fig. 3); After: 403 (Fig. 11)
+sara / student	managed	/admin	Student token	Deny	Before: 200 (Fig. 4); After: 404 (Fig. 12)
+sara / student	managed	/metrics	Student token	Deny	Before: 200 (Fig. 5); After: 404 (Fig. 13)
+sara / student	managed	/ADMIN	Case-variant path	Deny	Before: 200 (Fig. 15); After: 404 (Fig. 18)
+Any client	—	PEP TLS	TLS 1.0	Deny	alert protocol version (Fig. 6)
+Any client	—	PEP TLS	TLS 1.2	Allow	ECDHE-RSA-AES256-GCM-SHA384 (Fig. 8)
+9. Why these fixes, and alternatives considered
+Weakness	Fix applied	Alternative	Why we chose the applied fix
+C1 Device posture	Deny unmanaged devices (403)	Challenge: redirect to device remediation or step-up verification	The assignment accepts deny or challenge. Deny uses the existing switch with no new code and gives clear evidence. Challenge needs device-management infrastructure. Trade-off: students on unmanaged personal devices are blocked, so the university must provide managed devices or an enrolment process.
+C2 Admin paths	Block /admin and /metrics at the student PEP (404)	Allow these paths only for tokens with role=admin	Admins already have a dedicated path (admin zone, SSH to the jump host). Exposing admin functions on the student entry point, even only for admins, enlarges the attack surface.
+10. Additional finding – case-sensitive path check (beyond required tests)
+The path check used self.path.startswith(("/admin", "/metrics")), which is case-sensitive. We tested an upper-case variant after fixing C2.
+![Figure 15](images/fig15_additional-before-ADMIN-uppercase-200.jpg)
+Figure 15 – Additional (BEFORE): /ADMIN with student token → HTTP 200 ALLOW (bypass)
+![Figure 16](images/fig16_path-check-before-change.jpg)
+Figure 16 – Path check in edge/pep.py BEFORE the change
+![Figure 17](images/fig17_path-check-after-lower.jpg)
+Figure 17 – Path check in edge/pep.py AFTER the change (.lower() added)
+![Figure 18](images/fig18_additional-after-ADMIN-404.jpg)
+Figure 18 – Additional (AFTER): /ADMIN → HTTP 404 DENY
+![Figure 19](images/fig19_legitimate-request-after-lower-200.png)
+Figure 19 – Legitimate request after the .lower() change: /exam → HTTP 200 ALLOW
+Fix: the path is converted to lower case before comparison, so /ADMIN, /Admin and /admin are all treated the same. After restarting the PEP, /ADMIN is denied (Figure 18) and the legitimate /exam request still succeeds (Figure 19).
+11. Additional finding – URL-encoded path bypass (beyond required tests)
+After the .lower() change, the path check still compared the raw, percent-encoded path. %61 is the URL encoding of the letter "a", so /%61dmin did not match /admin and passed the check, while the exam app decoded it to /admin. We tested this variant with curl --path-as-is so that curl sent the path unchanged.
+![Figure 20](images/fig20_additional-before-encoded-61dmin-200.png)
+Figure 20 – Additional (BEFORE): /%61dmin with student token → HTTP 200 ALLOW (bypass)
+![Figure 21](images/fig21_imports-before-change.png)
+Figure 21 – Imports in edge/pep.py BEFORE the change
+![Figure 22](images/fig22_imports-after-urllib-parse.png)
+Figure 22 – Imports in edge/pep.py AFTER the change (urllib.parse added)
+![Figure 23](images/fig23_path-check-after-unquote.png)
+Figure 23 – Path check in edge/pep.py AFTER the change (urllib.parse.unquote() added)
+![Figure 24](images/fig24_additional-after-encoded-61dmin-404.png)
+Figure 24 – Additional (AFTER): /%61dmin → HTTP 404 DENY
+![Figure 25](images/fig25_legitimate-request-after-unquote-200.png)
+Figure 25 – Legitimate request after the unquote() change: /exam → HTTP 200 ALLOW
+Fix: the path is URL-decoded with urllib.parse.unquote() and then converted to lower case before comparison, so /%61dmin, /ADMIN and /admin are all treated the same. After restarting the PEP, /%61dmin is denied (Figure 24) and the legitimate /exam request still succeeds (Figure 25).
+12. Residual risks
+R1 – IdP issues tokens without authentication (tested)
+![Figure 26](images/fig26_idp-issues-token-hacker-admin-managed.jpg)
+Figure 26 – Additional: IdP issued a signed token for hacker / admin / managed on request
+The IdP returned a validly signed token for user "hacker" with role admin and device managed, with no password or any other check. The PEP correctly verifies the signature, but it cannot know that the IdP never verified the user, role or device. Consequence: the device-posture control fixed in C1 can be bypassed by simply requesting device=managed. The IdP is not among the files we may modify, so this is documented, not fixed.
+Recommendation: the IdP must authenticate users (password + MFA), take roles from a directory rather than from the request, obtain device posture from a device-management (MDM) system, and issue short-lived tokens.
+Observed by code review (not tested)
+R2 – Hard-coded secret: SHARED_SECRET is written in edge/pep.py. Anyone who can read the file can mint valid tokens. It should be stored in a secrets manager and rotated.
+R3 – No token expiry: the token format user|role|device|signature has no timestamp, so a stolen token stays valid indefinitely.
+R4 – Unencrypted PEP-to-app hop: UPSTREAM is http://10.145.20.10:80. The exam app relies on host-firewall segmentation (Part B) so that only the PEP can reach it.
+13. Zero Trust link
+This part applies the Zero Trust principle "never trust, always verify": being on the campus network gives no access. Every request is evaluated on identity (signed IdP token), device posture and requested resource, at the PEP, which is the policy enforcement component described in NIST SP 800-207. The result of the PEP's decision is the same whatever network location the request comes from
 
 ## 7. Part D: Secure Remote Connectivity & WireGuard Scoping
 **Assigned to:** Abdulaziz Difallah Asiri
