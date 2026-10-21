@@ -18,7 +18,7 @@
 | :--- | :---: | :--- |
 | **Abdulaziz Mashnawi** | **Part A & B** | Network Discovery, Vulnerability Assessment, Host Micro-segmentation & nftables Remediation |
 | **Abdullah Abdali** | **Part C** | Policy Enforcement Point (PEP) Policy Audit, Device Posture & Path Security Hardening |
-| **Abdulaziz Difallah Asiri** | **Part D & E** | WireGuard Vendor Tunnel Scoping, VPN vs. ZTNA Evaluation, PKI & X.509 Certificate Remediation |
+| ****[Abdulaziz Difallah Asiri](https://github.com/Eng-Abdulaziz-Asiri)**** | **Part D & E** | WireGuard Vendor Tunnel Scoping, VPN vs. ZTNA Evaluation, PKI & X.509 Certificate Remediation |
 | **Khalid Alfaifi** | **Part F** | Cloud/Hybrid Controls, Egress Restrictions, and Cloud Shared Responsibility Framework |
 | **Khalid Al-Qanbar** | **Part G** | CISA ZTMM v2.0 Maturity Assessment, Gap Analysis & Executive Management Memo |
 
